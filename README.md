@@ -87,9 +87,8 @@ event-system
 ---
 
 ## 클래스 다이어그램
+![img.png](event-system-diagram.png)
 ![event-system 다이어그램](event-system-diagram.png)
-<img width="1331" alt="image" src="https://github.com/user-attachments/assets/5bf12e03-b444-405d-aa09-81a941029a20" />
-
 
 <br>
 

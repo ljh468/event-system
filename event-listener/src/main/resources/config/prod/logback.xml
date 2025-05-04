@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="true">
+
+  <!-- 공통 속성 -->
+  <springProperty scope="context" name="springAppName" source="spring.application.name" defaultValue="event-system"/>
+  <property name="LOG_PATH" value="/home/vsftpd/event-system/logs"/>
+  <property name="LOG_PATTERN" value="%yellow(%d{yyyy-MM-dd HH:mm:ss, Asia/Seoul}) %highlight(%level) %green([%thread]) %cyan(%logger{50}) - %msg%n"/>
+
+  <!-- 콘솔 로그 -->
+  <appender name="Console" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>${LOG_PATTERN}</pattern>
+    </encoder>
+  </appender>
+
+  <!-- 로컬 파일 롤링 로그 -->
+  <appender name="RollingFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>${LOG_PATH}/server.log</file>
+    <encoder>
+      <pattern>${LOG_PATTERN}</pattern>
+    </encoder>
+    <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+      <fileNamePattern>${LOG_PATH}/server.log.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+      <maxFileSize>10MB</maxFileSize>
+      <maxHistory>100</maxHistory> <!-- 100일 보관 -->
+    </rollingPolicy>
+  </appender>
+
+  <!-- 로그 레벨 설정 -->
+  <root level="INFO">
+    <appender-ref ref="Console"/>
+    <appender-ref ref="RollingFile"/>
+  </root>
+
+  <!-- 특정 패키지 로깅 설정 -->
+  <logger name="org.hibernate.SQL" level="WARN"/>
+  <logger name="com.zaxxer.hikari.HikariConfig" level="WARN"/>
+  <logger name="io.lettuce.core" level="INFO"/>
+
+</configuration>

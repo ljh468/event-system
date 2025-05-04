@@ -1,0 +1,110 @@
+bootJar.enabled = true
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+    // Lettuce와 호환되는 Netty 버전
+    implementation 'io.netty:netty-resolver-dns:4.1.115.Final'
+    implementation 'io.netty:netty-transport-native-epoll:4.1.115.Final' // 리눅스 최적화 (선택 사항)
+
+    implementation 'org.flywaydb:flyway-database-postgresql'
+    runtimeOnly 'org.postgresql:postgresql'
+}
+
+// Gradle 속성 설정
+def profile = project.hasProperty("profile") ? project.findProperty("profile") : "local"
+def imageName = "event-system/event-listener"
+def ecrRepo = "{ecr address}/event-system"
+def imageTag = project.hasProperty("imageTag") ? project.findProperty("imageTag") : "latest"
+
+// Jib 설정: Jib 플러그인을 사용해 Docker 이미지 빌드
+jib {
+    from {
+        image = 'amazoncorretto:21'
+    }
+    to {
+        image = imageName
+        tags = ['latest']
+    }
+    container {
+        ports = ['8080', '47170']
+        creationTime = 'USE_CURRENT_TIMESTAMP'
+        jvmFlags = [
+                "-Dspring.profiles.active=${profile}",
+                "-Dspring.config.additional-location=classpath:/config/${profile}/",
+                "-Dlogging.config=classpath:/config/${profile}/logback.xml"
+        ]
+    }
+}
+
+// 1) ECR 로그인
+// 사용 예시: ./gradlew awsLogin
+tasks.register('awsLogin', Exec) {
+    group = 'docker'
+    description = 'AWS ECR에 로그인'
+    doFirst {
+        println "[awsLogin] AWS ECR 로그인 시도 중..."
+    }
+    commandLine 'bash', '-c', "aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin ${ecrRepo}"
+}
+
+// 2) 태깅
+// 사용 예시: ./gradlew dockerTag -PimageTag=v1.0.0
+tasks.register('dockerTag', Exec) {
+    group = 'docker'
+    description = '로컬 이미지를 ECR 형식으로 태깅'
+    doFirst {
+        println "[dockerTag] 이미지 태깅 중: ${imageName}:latest → ${ecrRepo}:${imageTag}"
+    }
+    commandLine 'docker', 'tag', "${imageName}:latest", "${ecrRepo}:${imageTag}"
+}
+
+// 3) 태깅 이미지 ECR에 푸시
+// 사용 예시: ./gradlew dockerPush -PimageTag=v1.0.0
+tasks.register('dockerPush', Exec) {
+    group = 'docker'
+    description = '태깅된 이미지를 ECR에 푸시'
+    doFirst {
+        println "[dockerPush] ECR로 Docker 이미지 푸시 중: ${ecrRepo}:${imageTag}"
+    }
+    commandLine 'docker', 'push', "${ecrRepo}:${imageTag}"
+}
+
+// 4) 로컬 이미지 삭제
+// 사용 예시: ./gradlew dockerRmi -PimageTag=v1.0.0
+tasks.register('dockerRmi', Exec) {
+    group = 'docker'
+    description = '로컬 Docker 이미지 삭제'
+    doFirst {
+        println "[dockerRmi] 로컬 Docker 이미지 삭제 중: ${imageName}:latest / ${ecrRepo}:${imageTag}"
+    }
+    commandLine 'bash', '-c', "docker rmi ${imageName}:latest ${ecrRepo}:${imageTag} || true"
+}
+
+// 5) 전체 자동화 태스크
+// 사용 예시: ./gradlew buildAndPushDockerImage -Pprofile=dev -PimageTag=v1.0.0
+tasks.register('buildAndPushDockerImage') {
+    group = "docker"
+    description = 'Docker 이미지를 빌드하고 ECR에 푸시 -> 로컬 이미지 삭제'
+
+    // 순차적 실행을 보장하기 위한 dependsOn
+    dependsOn 'awsLogin'
+    dependsOn 'jibDockerBuild'
+    dependsOn 'dockerTag'
+    dependsOn 'dockerPush'
+    dependsOn 'dockerRmi'
+
+    // 태스크 실행 순서 보장
+    jibDockerBuild.mustRunAfter 'awsLogin'
+    dockerTag.mustRunAfter 'jibDockerBuild'
+    dockerPush.mustRunAfter 'dockerTag'
+    dockerRmi.mustRunAfter 'dockerPush'
+
+    doFirst {
+        println "[buildAndPushDockerImage] 전체 Docker 빌드 및 배포 프로세스 시작"
+    }
+}

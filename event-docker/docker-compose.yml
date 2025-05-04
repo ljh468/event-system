@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  redis-node-1:
+    image: redis:7.2
+    container_name: redis-node-1
+    command: redis-server /usr/local/etc/redis/redis.conf
+    ports:
+      - "7001:7001"
+      - "17001:17001"
+    volumes:
+      - ./redis/redis-node-1.conf:/usr/local/etc/redis/redis.conf
+      - redis-data-1:/data
+    networks:
+      redis-cluster-net:
+        aliases:
+          - redis-node-1
+    environment:
+      TZ: Asia/Seoul  # 타임존 설정
+
+  redis-node-2:
+    image: redis:7.2
+    container_name: redis-node-2
+    command: redis-server /usr/local/etc/redis/redis.conf
+    ports:
+      - "7002:7002"
+      - "17002:17002"
+    volumes:
+      - ./redis/redis-node-2.conf:/usr/local/etc/redis/redis.conf
+      - redis-data-2:/data
+    networks:
+      redis-cluster-net:
+        aliases:
+          - redis-node-2
+    environment:
+      TZ: Asia/Seoul  # 타임존 설정
+
+  redis-node-3:
+    image: redis:7.2
+    container_name: redis-node-3
+    command: redis-server /usr/local/etc/redis/redis.conf
+    ports:
+      - "7003:7003"
+      - "17003:17003"
+    volumes:
+      - ./redis/redis-node-3.conf:/usr/local/etc/redis/redis.conf
+      - redis-data-3:/data
+    networks:
+      redis-cluster-net:
+        aliases:
+          - redis-node-3
+    environment:
+      TZ: Asia/Seoul  # 타임존 설정
+
+  redis-cluster-entry:
+    image: redis:7.2
+    container_name: redis-cluster-init
+    depends_on:
+      - redis-node-1
+      - redis-node-2
+      - redis-node-3
+    networks:
+      - redis-cluster-net
+    entrypoint: >
+      sh -c "
+        sleep 20 &&
+        echo yes | redis-cli -a root --cluster create redis-node-1:7001 redis-node-2:7002 redis-node-3:7003 --cluster-replicas 0 &&
+        sleep 5 &&
+        redis-cli -a root -h redis-node-1 -p 7001 ACL SETUSER root on >root ~* +@all &&
+        redis-cli -a root -h redis-node-2 -p 7002 ACL SETUSER root on >root ~* +@all &&
+        redis-cli -a root -h redis-node-3 -p 7003 ACL SETUSER root on >root ~* +@all
+      "
+    environment:
+      TZ: Asia/Seoul  # 타임존 설정
+
+  postgres:
+    image: postgres:14
+    container_name: postgres-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: event-system
+      TZ: Asia/Seoul  # 타임존 설정
+    networks:
+      - postgres-net
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  redis-data-1:
+  redis-data-2:
+  redis-data-3:
+  postgres-data:
+
+networks:
+  redis-cluster-net:
+    driver: bridge
+  postgres-net:
+    driver: bridge

@@ -1,0 +1,112 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.4.4'
+	id 'io.spring.dependency-management' version '1.1.7'
+	id 'com.google.cloud.tools.jib' version "3.4.0"
+}
+
+ext {
+	set('springCloudVersion', '2024.0.0')
+}
+
+allprojects {
+	group = 'com.event'
+	version = '0.0.1'
+
+	repositories {
+		mavenCentral()
+		gradlePluginPortal()
+	}
+}
+
+// 최상위 빌드 태스크 비활성화
+tasks.named('bootJar') {
+	enabled = false
+}
+
+tasks.named('jar') {
+	enabled = false
+}
+
+tasks.named('build') {
+	enabled = false
+}
+
+// 루트 프로젝트를 제외한 하위 프로젝트에만 적용
+subprojects {
+	apply plugin: 'java'
+	apply plugin: 'java-library'
+	apply plugin: 'org.springframework.boot'
+	apply plugin: 'io.spring.dependency-management'
+	apply plugin: 'com.google.cloud.tools.jib'
+
+	java {
+		toolchain {
+			languageVersion = JavaLanguageVersion.of(21)
+			vendor = JvmVendorSpec.AMAZON
+		}
+	}
+
+	configurations {
+		compileOnly {
+			extendsFrom annotationProcessor
+		}
+	}
+
+	/**
+	 * #### dependencyManagement 태그 : 프로젝트에서 사용되는 의존성들의 버전을 관리 ####
+	 * Bom (Bill of Materials)
+	 * 프로젝트에서 사용되는 의존성을 추가한 특정 라이브러리의 모든 하위 라이브러리 버전을 일관되게 맞춰줌 (하위 모듈에도 적용)
+	 */
+	dependencyManagement {
+		imports {
+			mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+		}
+	}
+
+	/**
+	 * #### dependencies 태그 : 프로젝트에서 실제로 사용될 의존성을 선언하고 스코프를 지정 ####
+	 * api 키워드: 해당 모듈을 의존하는 다른 모듈도 사용 가능 (재사용성이 높아지지만, 모듈간의 결합도가 강해짐)
+	 * implementation 키워드: 내부에서만 사용 (모듈간의 결합도를 낮춰서 캡슐화가 유지됨)
+	 */
+	dependencies {
+		compileOnly 'org.projectlombok:lombok'
+		annotationProcessor 'org.projectlombok:lombok'
+		annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+		// Spring Boot Starter Test (junit)
+		testImplementation 'org.springframework.boot:spring-boot-starter-test'
+		testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+		// jackson
+		implementation 'com.fasterxml.jackson.core:jackson-databind'
+		implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+		implementation 'com.fasterxml.jackson.module:jackson-module-parameter-names'
+
+		// common lang3
+		implementation 'org.apache.commons:commons-lang3'
+	}
+
+	tasks.named('test') {
+		useJUnitPlatform()
+		testLogging {
+			events "passed", "skipped", "failed"
+		}
+	}
+
+	tasks.withType(JavaCompile).configureEach {
+		options.compilerArgs << '-parameters'
+	}
+
+	tasks.named('bootJar') {
+		enabled = false
+	}
+
+	tasks.named('jar') {
+		enabled = false
+	}
+
+	tasks.named('build') {
+		enabled = false
+	}
+}
